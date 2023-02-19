@@ -28,7 +28,7 @@ services:
       - 53
   site-a:
     build: site
-    command: sh -c "python main.py 192.168.1.2"
+    command: sh -c "python main.py A 192.168.1.2"
     working_dir: /app
     depends_on: 
       - router
@@ -43,7 +43,7 @@ services:
       - 53
   site-b:
     build: site
-    command: sh -c "python main.py 192.168.2.2"
+    command: sh -c "python main.py B 192.168.2.2"
     working_dir: /app
     depends_on: 
       - router
