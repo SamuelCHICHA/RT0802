@@ -8,14 +8,14 @@ import json
 def listen(ip_address: str):
     sock_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # site_logger.debug(f"IP: {ip_address}")
-    sock_server.bind(("0.0.0.0", 53))
+    sock_server.bind(("0.0.0.0", 1024))
     site_logger.info("Listening 0.0.0.0 on port 53")
     sock_server.listen(5)
     while True:
-        (sock_src, address_src) = sock_server.accept()
-        site_logger.info(f"Accepting new connection from {address_src[0]}")
+        (sock_src, (address_src, port_src)) = sock_server.accept()
+        site_logger.info(f"Accepting new connection from {address_src}:{port_src}")
         msg = sock_src.recv(2048).decode()
-        site_logger.info(f"Received from {address_src[0]}: {msg}")
+        site_logger.info(f"Received from {address_src}: {msg}")
 
 def main(id_site: str, ip_address: str):
     site_logger.info(f"Site {id_site} started")
@@ -23,7 +23,7 @@ def main(id_site: str, ip_address: str):
     thread.start()
     if id_site == "A":
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((ip_address, 53))
+        sock.connect((ip_address, 1024))
         sock.sendall("yikes".encode())
     
 
