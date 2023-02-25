@@ -4,28 +4,11 @@ import logging
 import logging.config
 import sys
 import json
-
-def listen(ip_address: str):
-    sock_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # site_logger.debug(f"IP: {ip_address}")
-    sock_server.bind(("0.0.0.0", 1024))
-    site_logger.info("Listening 0.0.0.0 on port 53")
-    sock_server.listen(5)
-    while True:
-        (sock_src, (address_src, port_src)) = sock_server.accept()
-        site_logger.info(f"Accepting new connection from {address_src}:{port_src}")
-        msg = sock_src.recv(2048).decode()
-        site_logger.info(f"Received from {address_src}: {msg}")
-
-def main(id_site: str, ip_address: str):
-    site_logger.info(f"Site {id_site} started")
-    thread = threading.Thread(target=listen, args=[ip_address])
-    thread.start()
-    if id_site == "A":
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect((ip_address, 1024))
-        sock.sendall("yikes".encode())
+from TCPServer import TCPServer
     
+def start_tcp_server(id_site: str, logger: logging.Logger):
+    with TCPServer(("0.0.0.0", 1024), logger) as server:
+        server.serve_forever()
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
@@ -37,6 +20,11 @@ if __name__ == "__main__":
     id_site = sys.argv[1]
     ip_address = sys.argv[2]
     site_logger = logging.getLogger(f"site{id_site}")
-    main(id_site, ip_address)
-else:
-    raise RuntimeError("Not the target")
+    site_logger.info("Starting server")
+    threading.Thread(target=start_tcp_server, args=(id_site, site_logger)).start()
+    if id_site == "A":
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((ip_address, 1024))
+            sock.sendall("B: Salut, je m'appelle B".encode())
+
+    
