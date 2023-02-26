@@ -25,6 +25,6 @@ if __name__ == "__main__":
     if id_site == "A":
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((ip_address, 1024))
-            sock.sendall("B: Salut, je m'appelle B".encode())
+            sock.sendall("B: Test".encode())
 
     
