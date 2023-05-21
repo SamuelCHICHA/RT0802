@@ -4,6 +4,7 @@ import json
 from Router import Router
 from CA import CA
 import threading
+from OpenSSL import crypto
     
 def start_router():
     router_logger.info("Router starting")
@@ -22,7 +23,12 @@ if __name__ == "__main__":
         routing_table = json.load(routing_table_file)
     router_logger = logging.getLogger('router')
     ca_logger = logging.getLogger('ca')
-    threading.Thread(target=start_router, name="Thread Router").run()
-    # threading.Thread(target=start_ca, name="Thread CA").run()
+    router_thread = threading.Thread(target=start_router, name="Thread Router")
+    ca_thread = threading.Thread(target=start_ca, name="Thread CA")
+    ca_thread.start()
+    router_thread.start()
+    ca_thread.join()
+    router_thread.join()
+    
     
     
