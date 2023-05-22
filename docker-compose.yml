@@ -9,6 +9,11 @@ networks:
     ipam:
       config:
         - subnet: 192.168.2.0/24
+  network-c:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.3.0/24
 
 services:
   router:
@@ -20,6 +25,8 @@ services:
         ipv4_address: 192.168.1.2
       network-b:
         ipv4_address: 192.168.2.2
+      network-c:
+        ipv4_address: 192.168.3.2
     volumes:
       - type: bind
         source: root
@@ -50,6 +57,21 @@ services:
     networks:
       network-b:
         ipv4_address: 192.168.2.3
+    volumes:
+      - type: bind
+        source: site
+        target: /app
+    expose:
+      - 1024
+  site-c:
+    build: site
+    command: sh -c "python main.py C 192.168.3.2"
+    working_dir: /app
+    depends_on: 
+      - router
+    networks:
+      network-a:
+        ipv4_address: 192.168.3.3
     volumes:
       - type: bind
         source: site
