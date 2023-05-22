@@ -70,7 +70,7 @@ services:
     depends_on: 
       - router
     networks:
-      network-a:
+      network-c:
         ipv4_address: 192.168.3.3
     volumes:
       - type: bind
