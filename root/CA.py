@@ -1,17 +1,16 @@
 import socketserver
-from logging import Logger
 import re
-import OpenSSL.crypto as crypto
-from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15, OAEP, MGF1
-from cryptography.hazmat.primitives import hashes
-
 import base64
 
+from OpenSSL import crypto
+
+from cryptography.hazmat.primitives.asymmetric.padding import OAEP, MGF1
+from cryptography.hazmat.primitives import hashes
 
 class CA(socketserver.ThreadingTCPServer):
     CHUNK_SIZE = 100
     
-    def __init__(self, server_address, logger: Logger, bind_and_activate: bool = True) -> None:
+    def __init__(self, server_address, logger, bind_and_activate: bool = True) -> None:
         super().__init__(server_address, CAHandler, bind_and_activate)
         self.logger = logger
         with open("sec/certificate.pem") as cert_file:
@@ -25,7 +24,7 @@ class CA(socketserver.ThreadingTCPServer):
         certificate.set_serial_number(1)
         certificate.gmtime_adj_notBefore(0)
         certificate.gmtime_adj_notAfter(31536000) # Valid for a year
-        certificate.set_issuer(certificate.get_subject())
+        certificate.set_issuer(self.certificate.get_subject())
         certificate.set_pubkey(public_key)
         certificate.sign(self.key_pair, 'sha256')
         return certificate

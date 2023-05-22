@@ -1,63 +1,78 @@
-import logging
-from OpenSSL import crypto
-import threading
-from TCPServer import TCPServer
+from __future__ import annotations
+
 import socket
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15, OAEP, MGF1
-from cryptography.hazmat.primitives import hashes
-import os
 import base64
+import logging
+import socketserver
+
+from SiteHandler import SiteHandler
+
+from OpenSSL import crypto
+
+from os import urandom
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.asymmetric.padding import OAEP, MGF1
+from cryptography.hazmat.primitives.padding import PKCS7
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
 
 
-class Site:
+class Site(socketserver.ThreadingTCPServer):
     CHUNK_SIZE = 1024
     
-    def __init__(self, id: str, root_ip: str, logger: logging.Logger):
+    def __init__(self, server_address: socketserver._AfInetAddress, id: str, root_ip: str, logger: logging.Logger, bind_and_activate: bool = True):
         if not isinstance(id, str):
             raise TypeError
         if not isinstance(root_ip, str):
             raise TypeError
         if not isinstance(logger, logging.Logger):
             raise TypeError
+        super().__init__(server_address, SiteHandler, bind_and_activate)
         self.id = id
         self.root_ip = root_ip
         self.logger = logger
         self.generate_pair()
         self.load_root_cert()
+        self.comms = dict()
 
+    @classmethod
+    def create_symmetric_key(cls) -> bytes:
+        return urandom(16)
+    
+    @classmethod
+    def symmetric_encrypt(cls, key: bytes, data: bytes) -> bytes:
+        iv = urandom(16)
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+        encryptor = cipher.encryptor()
+        
+        padder = PKCS7(128).padder()
+        padded_data = padder.update(data) + padder.finalize()
+        
+        encrypted = encryptor.update(padded_data) + encryptor.finalize()
+        
+        return iv + encrypted
+    
+    @classmethod
+    def symmetric_decrypt(cls, key: bytes, data: bytes) -> bytes:
+        iv = data[:16]
+        encrypted = data[16:]
+        
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+        decryptor = cipher.decryptor()
+        
+        decrypted = decryptor.update(encrypted) + decryptor.finalize()
+        
+        unpadder = PKCS7(128).unpadder()
+        
+        return unpadder.update(decrypted) + unpadder.finalize()
 
-    def start(self) -> None:
-        self.logger.info("Starting server")
-        server_thread = threading.Thread(target=self.start_tcp_server)
-        server_thread.start()
-        if self.id == "A":
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.connect((self.root_ip, 1024))
-                s.sendall("B:[3]Ping".encode())
-        elif self.id == "B":
-            # Code for B only
-            pass
-        else:
-            # Code for C only
-            pass
-        server_thread.join()
-
-
-    def start_tcp_server(self) -> None:
-        with TCPServer(("0.0.0.0", 1024), self) as server:
-            server.serve_forever()
-
-    def create_symmetric_key(self):
-        self.symmetric_key = Fernet.generate_key()
-        return self.symmetric_key
-
-    def check_certificate(self, certificate) -> bool:
+    def check_certificate(self, certificate: crypto.X509) -> bool:
         store_ctx = crypto.X509StoreContext(self.store, certificate)
         try:
             store_ctx.verify_certificate()
             valid = True
-        except crypto.X509StoreContextError:
+        except crypto.X509StoreContextError as e:
             valid = False
         return valid
     
@@ -74,16 +89,18 @@ class Site:
         chunks = data.split(b"||")
         decrypted_chunks = [key.to_cryptography_key().decrypt(chunk, padding) for chunk in chunks]
         return b"".join(decrypted_chunks)
+    
 
     def generate_pair(self) -> None:
-        key_pair = crypto.PKey()
-        key_pair.generate_key(crypto.TYPE_RSA, 2048)
-        pub_key = crypto.dump_publickey(crypto.FILETYPE_PEM, key_pair).decode()
-        self.logger.info(f"Public key:\n{crypto.dump_publickey(crypto.FILETYPE_PEM, key_pair).decode()}")
-        self.key_pair = key_pair
-        self.logger.info(f"Private key:\n{crypto.dump_privatekey(crypto.FILETYPE_PEM, key_pair).decode()}")
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
+        # Key pair generation
+        self.key_pair = crypto.PKey()
+        self.key_pair.generate_key(crypto.TYPE_RSA, 2048)
+        pub_key = crypto.dump_publickey(crypto.FILETYPE_PEM, self.key_pair).decode()
+        self.logger.info(f"Public key:\n{crypto.dump_publickey(crypto.FILETYPE_PEM, self.key_pair).decode()}")
+        self.logger.info(f"Private key:\n{crypto.dump_privatekey(crypto.FILETYPE_PEM, self.key_pair).decode()}")
+        
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 # We connect to the Certification Authority
                 s.connect((self.root_ip, 1025))
                 # We send our public key in order to let the CA generate and encrypt our certificate
@@ -92,14 +109,14 @@ class Site:
                 encoded_certificate = s.recv(4096)
                 self.logger.debug(f"Encoded and encrypted certificate:\n{encoded_certificate}")
                 encrypted_certificate_data = base64.b64decode(encoded_certificate)
-                self.logger.debug(f"Encrypted certificate data: {encrypted_certificate_data}")
+                self.logger.debug(f"Encrypted certificate data:\n{encrypted_certificate_data}")
                 # Decryption of the certificate
                 certificate_data = self.__class__.decrypt(self.key_pair, encrypted_certificate_data)
                 # Loading of the signed certificate
                 self.certificate = crypto.load_certificate(crypto.FILETYPE_PEM, certificate_data)
                 self.logger.info(f"Signed certificate:\n{crypto.dump_certificate(crypto.FILETYPE_PEM, self.certificate).decode()}")
-            except Exception as e:
-                self.logger.error(e)
+        except Exception as e:
+            self.logger.error(e)
 
 
 
@@ -109,5 +126,8 @@ class Site:
             self.logger.debug(f"Root certificate:\n{crypto.dump_certificate(crypto.FILETYPE_PEM, self.root_cert).decode()}")
             self.store = crypto.X509Store()
             self.store.add_cert(self.root_cert)
-
-    # def send_encrypted_socket(self, s: socket.socket, message, )
+            
+if __name__ == "__main__":
+    key = Site.create_symmetric_key()
+    encrypted = Site.symmetric_encrypt(key, b"coucou")
+    print(Site.symmetric_decrypt(key, encrypted))
