@@ -5,27 +5,12 @@ import re
 import socket
 
 class Router(socketserver.ThreadingTCPServer):
-    """Class responsible of routing messages between sites
-
-    Args:
-        server_address (socketserver._AfInetAddress): IP address + Port
-        logger (Logger): logger
-        routing_table (dict): Routing table
-        bind_and_activate (bool)
-    """
     def __init__(self, server_address: socketserver._AfInetAddress, logger: Logger, routing_table: dict, bind_and_activate: bool = True) -> None:
         super().__init__(server_address, RouterHandler, bind_and_activate)
         self.logger = logger
         self.routing_table = routing_table
         
 class RouterHandler(socketserver.StreamRequestHandler):
-    """
-
-    Args:
-        request (socketserver._RequestType):
-        client_address (socketserver._RetAddress):
-        server (Router):
-    """
     def __init__(self, request: socketserver._RequestType, client_address: socketserver._RetAddress, server: Router) -> None:
         if not isinstance(server, Router):
             raise TypeError("Expecting TCPServer")
