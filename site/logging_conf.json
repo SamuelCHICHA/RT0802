@@ -27,6 +27,15 @@
       "filename": "logs/siteB.log",
       "encoding": "utf8",
       "mode": "w"
+    },
+    "siteC": 
+    {
+      "class": "logging.FileHandler",
+      "level": "DEBUG",
+      "formatter": "simple",
+      "filename": "logs/siteC.log",
+      "encoding": "utf8",
+      "mode": "w"
     }
   },
   "loggers": 
@@ -45,6 +54,14 @@
       "handlers": 
       [
         "siteB"
+      ]
+    },
+    "siteC": 
+    {
+      "level": "DEBUG",
+      "handlers": 
+      [
+        "siteC"
       ]
     }
   }
