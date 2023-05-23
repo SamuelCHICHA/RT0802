@@ -32,7 +32,8 @@ services:
         source: root
         target: /app
     expose:
-      - 1024
+      - 1024 # Router
+      - 1025 # Certification Authority
   site-a:
     build: site
     command: sh -c "python main.py A 192.168.1.2"

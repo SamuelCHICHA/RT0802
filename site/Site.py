@@ -19,7 +19,7 @@ from cryptography.hazmat.backends import default_backend
 
 
 class Site(socketserver.ThreadingTCPServer):
-    CHUNK_SIZE = 1024
+    CHUNK_SIZE = 100
     
     def __init__(self, server_address: socketserver._AfInetAddress, id: str, root_ip: str, logger: logging.Logger, bind_and_activate: bool = True):
         if not isinstance(id, str):
@@ -38,10 +38,24 @@ class Site(socketserver.ThreadingTCPServer):
 
     @classmethod
     def create_symmetric_key(cls) -> bytes:
+        """Generates a key of 128bit (8*16)
+
+        Returns:
+            bytes: key
+        """
         return urandom(16)
     
     @classmethod
     def symmetric_encrypt(cls, key: bytes, data: bytes) -> bytes:
+        """Encrypts data using AES
+
+        Args:
+            key (bytes): key
+            data (bytes): data to be encrypted
+
+        Returns:
+            bytes: encrypted data
+        """
         iv = urandom(16)
         cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
         encryptor = cipher.encryptor()
@@ -55,6 +69,15 @@ class Site(socketserver.ThreadingTCPServer):
     
     @classmethod
     def symmetric_decrypt(cls, key: bytes, data: bytes) -> bytes:
+        """Decrypts data using AES
+
+        Args:
+            key (bytes): key
+            data (bytes): data
+
+        Returns:
+            bytes: decrypted data
+        """
         iv = data[:16]
         encrypted = data[16:]
         
@@ -68,6 +91,14 @@ class Site(socketserver.ThreadingTCPServer):
         return unpadder.update(decrypted) + unpadder.finalize()
 
     def check_certificate(self, certificate: crypto.X509) -> bool:
+        """Check if the certificate is valid according to the store
+
+        Args:
+            certificate (crypto.X509): certificate
+
+        Returns:
+            bool: is valid
+        """
         store_ctx = crypto.X509StoreContext(self.store, certificate)
         try:
             store_ctx.verify_certificate()
@@ -78,13 +109,32 @@ class Site(socketserver.ThreadingTCPServer):
     
     @classmethod
     def encrypt(cls, key: crypto.PKey, data: bytes) -> bytes:
+        """Asymetric encryption
+
+        Args:
+            key (crypto.PKey): public key
+            data (bytes): data to be encrypted
+
+        Returns:
+            bytes: encrypted data
+        """
         padding = OAEP(MGF1(hashes.SHA256()), hashes.SHA256(), None)
+        # Splitting data into chunks so it can be encrypted
         chunks = [data[i:i + cls.CHUNK_SIZE] for i in range(0, len(data), cls.CHUNK_SIZE)]
         encrypted_chunks = [key.to_cryptography_key().encrypt(chunk, padding) for chunk in chunks]
         return b"||".join(encrypted_chunks)
     
     @classmethod
     def decrypt(cls, key: crypto.PKey, data: bytes) -> bytes:
+        """Asymetric decryption
+
+        Args:
+            key (crypto.PKey): private key
+            data (bytes): data to be decrypted
+
+        Returns:
+            bytes: decrypted data
+        """
         padding = OAEP(MGF1(hashes.SHA256()), hashes.SHA256(), None)
         chunks = data.split(b"||")
         decrypted_chunks = [key.to_cryptography_key().decrypt(chunk, padding) for chunk in chunks]
@@ -92,6 +142,7 @@ class Site(socketserver.ThreadingTCPServer):
     
 
     def generate_pair(self) -> None:
+        """Generate a pair of RSA key and get the certificate signed by the PKI"""
         # Key pair generation
         self.key_pair = crypto.PKey()
         self.key_pair.generate_key(crypto.TYPE_RSA, 2048)
@@ -106,11 +157,13 @@ class Site(socketserver.ThreadingTCPServer):
                 # We send our public key in order to let the CA generate and encrypt our certificate
                 pub_key_encoded = base64.b64encode(pub_key.encode()).decode()
                 s.sendall(f"{self.id}:[1]{pub_key_encoded}".encode())
+                # We get the certificate
                 encoded_certificate = s.recv(4096)
                 self.logger.debug(f"Encoded and encrypted certificate:\n{encoded_certificate}")
+                # Decoding certificate
                 encrypted_certificate_data = base64.b64decode(encoded_certificate)
                 self.logger.debug(f"Encrypted certificate data:\n{encrypted_certificate_data}")
-                # Decryption of the certificate
+                # Decrypting certificate
                 certificate_data = self.__class__.decrypt(self.key_pair, encrypted_certificate_data)
                 # Loading of the signed certificate
                 self.certificate = crypto.load_certificate(crypto.FILETYPE_PEM, certificate_data)
@@ -121,6 +174,7 @@ class Site(socketserver.ThreadingTCPServer):
 
 
     def load_root_cert(self):
+        """Load the PKI certificate and add it to the store"""
         with open(f"sec/{self.id}/root.pem", "r") as root_cert_file:
             self.root_cert = crypto.load_certificate(crypto.FILETYPE_PEM, root_cert_file.read())
             self.logger.debug(f"Root certificate:\n{crypto.dump_certificate(crypto.FILETYPE_PEM, self.root_cert).decode()}")
@@ -128,6 +182,7 @@ class Site(socketserver.ThreadingTCPServer):
             self.store.add_cert(self.root_cert)
             
 if __name__ == "__main__":
+    # Checking that encryption works
     key = Site.create_symmetric_key()
     encrypted = Site.symmetric_encrypt(key, b"coucou")
     print(Site.symmetric_decrypt(key, encrypted))

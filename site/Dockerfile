@@ -3,4 +3,4 @@ WORKDIR /app
 COPY requirements.txt /app/
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
-EXPOSE 53
+EXPOSE 1024

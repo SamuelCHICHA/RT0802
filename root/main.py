@@ -17,8 +17,10 @@ def start_ca():
         ca.serve_forever()
 
 if __name__ == "__main__":
+    # Loading the logging configuration
     with open("logging_conf.json", "r") as logging_config_file:
         logging.config.dictConfig(json.load(logging_config_file))
+    # Loading the routing table
     with open("routing_table.json", "r") as routing_table_file:
         routing_table = json.load(routing_table_file)
     router_logger = logging.getLogger('router')
